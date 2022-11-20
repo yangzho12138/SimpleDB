@@ -1,0 +1,3 @@
+/Users/yang/CLionProjects/SimpleDB/cmake-build-debug/CMakeFiles/rebuild_cache.dir
+/Users/yang/CLionProjects/SimpleDB/cmake-build-debug/CMakeFiles/edit_cache.dir
+/Users/yang/CLionProjects/SimpleDB/cmake-build-debug/CMakeFiles/SimpleDB.dir
