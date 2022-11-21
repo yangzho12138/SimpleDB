@@ -4,7 +4,7 @@
 #include <string.h>
 #include <stdint.h>
 
-#define COLUMN_USERNAME_SIZE 32
+#define COLUMN_USERNAME_SIZE 32 // bytes
 #define COLUMN_EMAIL_SIZE 32
 
 typedef enum {
@@ -16,6 +16,8 @@ typedef enum {
     PREPARE_SUCCESS,
     PREPARE_UNRECOGNIZED_STATEMENT,
     PREPARE_SYNTAX_ERROR,
+    PREPARE_STRING_TOO_LONG,
+    PREPARE_NEGATIVE_ID,
 }PrepareResult;
 
 typedef enum {
@@ -37,8 +39,8 @@ typedef struct {
 
 typedef struct {
     uint32_t id;
-    char username[COLUMN_USERNAME_SIZE];
-    char email[COLUMN_EMAIL_SIZE];
+    char username[COLUMN_USERNAME_SIZE + 1]; // string ends with a null character
+    char email[COLUMN_EMAIL_SIZE + 1];
 }Row; // db schema
 
 typedef struct {
@@ -161,15 +163,49 @@ MetaCommandResult do_meta_command(InputBuffer* input_buffer){
 }
 
 // SQL Compiler
+PrepareResult prepare_insert(InputBuffer* input_buffer, Statement* statement){
+    statement->type = STATEMENT_INSERT;
+
+    // the first time call strtok
+    char* keyword = strtok(input_buffer->buffer, " "); // find the string behind the first
+    char* id_string = strtok(NULL, " "); // then call strtok, the str should be set to NULL -> the return string of last call
+    char* username = strtok(NULL, " ");
+    char* email = strtok(NULL, " ");
+
+    if(id_string == NULL || username == NULL || email == NULL){
+        return PREPARE_SYNTAX_ERROR;
+    }
+
+    uint32_t id = atoi(id_string);
+    if(id < 0){
+        return PREPARE_NEGATIVE_ID;
+    }
+    if(strlen(username) > COLUMN_USERNAME_SIZE){
+        return PREPARE_STRING_TOO_LONG;
+    }
+    if(strlen(email) > COLUMN_EMAIL_SIZE){
+        return PREPARE_STRING_TOO_LONG;
+    }
+
+    statement->row_to_insert.id = id;
+    strcpy(statement->row_to_insert.username, username);
+    strcpy(statement->row_to_insert.email, email);
+
+    return PREPARE_SUCCESS;
+}
+
+
+
 PrepareResult prepare_statement(InputBuffer* input_buffer, Statement* statement){
     if(strncmp(input_buffer->buffer, "insert", 6) == 0){
-        statement->type = STATEMENT_INSERT;
-        int arg_assigned = sscanf(input_buffer->buffer,
-                "insert %d %s %s", &(statement->row_to_insert.id), statement->row_to_insert.username, statement->row_to_insert.email);
-        if(arg_assigned < 3){
-            return PREPARE_SYNTAX_ERROR;
-        }
-        return PREPARE_SUCCESS;
+        // cons of sscanf:  If the string it’s reading is larger than the buffer it’s reading into, it will cause a buffer overflow and start writing into unexpected places
+//        statement->type = STATEMENT_INSERT;
+//        int arg_assigned = sscanf(input_buffer->buffer,
+//                "insert %d %s %s", &(statement->row_to_insert.id), statement->row_to_insert.username, statement->row_to_insert.email);
+//        if(arg_assigned < 3){
+//            return PREPARE_SYNTAX_ERROR;
+//        }
+        return prepare_insert(input_buffer, statement);
     }else if(strncmp(input_buffer->buffer, "select", 6) == 0){
         statement->type = STATEMENT_SELECT;
         return PREPARE_SUCCESS;
@@ -236,6 +272,12 @@ int main(int argc, char* argv[]){
 		switch (prepare_statement(input_buffer, &statement)){
 		    case (PREPARE_SUCCESS):
 		        break;
+		    case (PREPARE_STRING_TOO_LONG):
+		        printf("String is too long.\n");
+                continue;
+		    case (PREPARE_NEGATIVE_ID):
+                printf("ID must be positive.\n");
+                continue;
 		    case (PREPARE_SYNTAX_ERROR):
 		        printf("Syntax error. Could not parse statement.\n");
                 continue;
